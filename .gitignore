@@ -1,0 +1,5 @@
+bin/
+obj/
+*.csproj
+*.config
+Game Of Life.csproj.user
