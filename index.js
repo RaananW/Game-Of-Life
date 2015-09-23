@@ -1,6 +1,7 @@
 ﻿///<reference path="scripts/babylon.max.js" />
 
 var gridSize = [20, 20, 20];
+var initialMeshes = 300;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
 var lonelinessLimit = 1;
@@ -29,9 +30,14 @@ var createScene = function () {
 
     var light = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
 
+    initScene(scene, camera);
+
+}
+
+var initGrid = function (gridSize, initialMeshes, scene) {
     var grid = [];
 
-    for (var i = 0; i < 300; ++i) {
+    for (var i = 0; i < initialMeshes; ++i) {
         var x = ~~(Math.random() * gridSize[0] - 1);
         var y = ~~(Math.random() * gridSize[1] - 1);
         var z = ~~(Math.random() * gridSize[2] - 1);
@@ -39,6 +45,16 @@ var createScene = function () {
             birth(x, y, z, grid, scene);
         }
     }
+
+    return grid;
+}
+
+var initScene = function (scene, camera) {
+    scene.meshes.forEach(function (mesh) {
+        mesh.dispose();
+    });
+
+    var grid = initGrid(gridSize, initialMeshes, scene);
 
     setInterval(function () {
         gridTick(grid, scene);
