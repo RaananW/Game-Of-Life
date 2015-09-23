@@ -42,8 +42,9 @@ var createScene = function () {
 
     setInterval(function () {
         gridTick(grid, scene);
-        console.log("tick");
     }, 1000);
+
+    camera.target = new BABYLON.Vector3(gridSize[0] / 2, gridSize[1] / 2, gridSize[2] / 2);
 
 }
 
