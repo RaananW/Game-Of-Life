@@ -5,6 +5,7 @@ var initialMeshes = 300;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
 var lonelinessLimit = 1;
+var gridUpdateInMS = 1000; //two seconds
 
 var createScene = function () {
     // Get the canvas element from our HTML below
@@ -31,7 +32,6 @@ var createScene = function () {
     var light = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
 
     initScene(scene, camera);
-
 }
 
 var initGrid = function (gridSize, initialMeshes, scene) {
@@ -58,10 +58,9 @@ var initScene = function (scene, camera) {
 
     setInterval(function () {
         gridTick(grid, scene);
-    }, 1000);
+    }, gridUpdateInMS);
 
     camera.target = new BABYLON.Vector3(gridSize[0] / 2, gridSize[1] / 2, gridSize[2] / 2);
-
 }
 
 var gridTick = function (grid, scene) {
@@ -70,23 +69,20 @@ var gridTick = function (grid, scene) {
         for (var y = 0; y < gridSize[1]; ++y) {
             for (var z = 0; z < gridSize[2]; ++z) {
                 var cellPosition = gridPos(x,y,z);
-                var neighbors = getNumberOfNeighbors(x, y, z, grid);
+                var neighbors = getNeighbors(x, y, z, grid);
                 if (!grid[cellPosition]) {
-                    if (neighbors == breedingLimit) {
-                        //birth(x, y, z, grid, scene);
-                        births.push([x,y,z]);
+                    if (neighbors.total == breedingLimit) {
+                        births.push({pos:[x,y,z], neighbors:neighbors});
                     }
                 } else {
-                    if (neighbors >= overCrowdingLimit) {
-                        //death(cellPosition, false, grid);
-                        deaths.push({ cellPosition: cellPosition, isAlone: false });
+                    if (neighbors.total >= overCrowdingLimit) {
+                        deaths.push({ cellPosition: cellPosition, isAlone: false, neighbors:neighbors });
                     }
-                    else if (neighbors <= lonelinessLimit) {
-                        //death(cellPosition, true, grid);
-                        deaths.push({ cellPosition: cellPosition, isAlone: true });
+                    else if (neighbors.total <= lonelinessLimit) {
+                        deaths.push({ cellPosition: cellPosition, isAlone: true, neighbors: neighbors });
                     }
                     else {
-                        //update(cellPosition, neighbors, grid);
+                        update(cellPosition, neighbors, grid);
                     }
                 }
             }
@@ -94,16 +90,17 @@ var gridTick = function (grid, scene) {
     }
 
     births.forEach(function (birthDef) {
-        birth(birthDef[0], birthDef[1], birthDef[2], grid, scene);
+        birth(birthDef.pos[0], birthDef.pos[1], birthDef.pos[2], grid, scene);
     });
 
     deaths.forEach(function (deathDef) {
-        death(deathDef.cellPosition, deathDef.isAlone, grid);
+        death(deathDef.cellPosition, deathDef.isAlone, grid, scene);
     });
 }
 
-var getNumberOfNeighbors = function (x, y, z, grid) {
+var getNeighbors = function (x, y, z, grid) {
     var totalNeighbors = 0;
+    var neighbors = [];
 
     var xLow = x > 0 ? x - 1 : 0;
     var yLow = y > 0 ? y - 1 : 0;
@@ -118,14 +115,16 @@ var getNumberOfNeighbors = function (x, y, z, grid) {
         for (var yTest = yLow; yTest < yHigh; ++yTest) {
             for (var zTest = zLow; zTest < zHigh; ++zTest) {
                 if (xTest == x && yTest == y && zTest == z) continue;
-                if (grid[gridPos(xTest, yTest, zTest)]) {
+                var box = grid[gridPos(xTest, yTest, zTest)]
+                if (box/* && box.animations.length==0*/) {
+                    neighbors.push(grid[gridPos(xTest, yTest, zTest)]);
                     ++totalNeighbors;
                 }
             }
         }
     }
 
-    return totalNeighbors;    
+    return { total: totalNeighbors, neighbors: neighbors };
 }
 
 var gridPos = function(x,y,z) {
@@ -133,9 +132,31 @@ var gridPos = function(x,y,z) {
 }
 
 //when a cell dies...
-var death = function (cellPosition, isAlone, grid) {
-    grid[cellPosition].dispose();
-    grid[cellPosition] = null;
+var death = function (cellPosition, isAlone, grid, scene) {
+
+    //create the scaling animation
+    var animationDeath = new BABYLON.Animation("deathAnimation", "scaling", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+
+    var keys = [];
+    keys.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].scaling });
+    keys.push({ frame: gridUpdateInMS, value: new BABYLON.Vector3(0, 0, 0) });
+    animationDeath.setKeys(keys);
+
+    var easingFunction = new BABYLON.QuinticEase();
+
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+
+    animationDeath.setEasingFunction(easingFunction);
+
+    grid[cellPosition].animations.push(animationDeath);
+
+    scene.beginAnimation(grid[cellPosition], 0, gridUpdateInMS, false, 1.5, function () {
+        //safety
+        if (grid[cellPosition]) {
+            grid[cellPosition].dispose();
+            grid[cellPosition] = null;
+        }
+    });
 }
 
 //when a new cell is born...
@@ -143,6 +164,26 @@ var birth = function (x, y, z, grid, scene) {
     //a clone hack...
     var box = scene.meshes.length ? scene.meshes[0].clone() : new BABYLON.Mesh.CreateBox("box", 1, scene);
     box.position = new BABYLON.Vector3(x, y, z);
+    box.scaling = BABYLON.Vector3.Zero();
+
+    //create the scaling animation
+    var animationBirth = new BABYLON.Animation("birthAnimation", "scaling", gridUpdateInMS*1.8, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+
+    var keys = [];
+    keys.push({ frame: ~~(gridUpdateInMS * Math.random()), value: box.scaling });
+    keys.push({ frame: gridUpdateInMS*1.8, value: new BABYLON.Vector3(1, 1, 1) });
+    animationBirth.setKeys(keys);
+
+    var easingFunction = new BABYLON.CircleEase();
+
+    easingFunction.setEasingMode(BABYLON.EasingFunction.EASINGMODE_EASEINOUT);
+
+    animationBirth.setEasingFunction(easingFunction);
+
+    box.animations.push(animationBirth);
+
+    scene.beginAnimation(box, 0, gridUpdateInMS*1.8, false);
+
     grid[gridPos(x,y,z)] = box;
 }
 
