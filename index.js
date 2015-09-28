@@ -1,7 +1,7 @@
 ﻿///<reference path="scripts/babylon.max.js" />
 
-var gridSize = [20, 20, 20];
-var initialMeshes = 300;
+var gridSize = [15, 15, 15];
+var initialMeshes = 200;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
 var lonelinessLimit = 1;
@@ -68,23 +68,7 @@ var gridTick = function (grid, scene) {
     for (var x = 0; x < gridSize[0]; ++x) {
         for (var y = 0; y < gridSize[1]; ++y) {
             for (var z = 0; z < gridSize[2]; ++z) {
-                var cellPosition = gridPos(x,y,z);
-                var neighbors = getNeighbors(x, y, z, grid);
-                if (!grid[cellPosition]) {
-                    if (neighbors.total == breedingLimit) {
-                        births.push({pos:[x,y,z], neighbors:neighbors});
-                    }
-                } else {
-                    if (neighbors.total >= overCrowdingLimit) {
-                        deaths.push({ cellPosition: cellPosition, isAlone: false, neighbors:neighbors });
-                    }
-                    else if (neighbors.total <= lonelinessLimit) {
-                        deaths.push({ cellPosition: cellPosition, isAlone: true, neighbors: neighbors });
-                    }
-                    else {
-                        update(cellPosition, neighbors, grid);
-                    }
-                }
+                checkCell(x, y, z, grid, scene, deaths, births);
             }
         }
     }
@@ -96,6 +80,26 @@ var gridTick = function (grid, scene) {
     deaths.forEach(function (deathDef) {
         death(deathDef.cellPosition, deathDef.isAlone, grid, scene);
     });
+}
+
+var checkCell = function (x, y, z, grid, scene, /*tmp!*/deaths, births) {
+    var cellPosition = gridPos(x, y, z);
+    var neighbors = getNeighbors(x, y, z, grid);
+    if (!grid[cellPosition]) {
+        if (neighbors.total == breedingLimit) {
+            births.push({ pos: [x, y, z], neighbors: neighbors });
+        }
+    } else {
+        if (neighbors.total >= overCrowdingLimit) {
+            deaths.push({ cellPosition: cellPosition, isAlone: false, neighbors: neighbors });
+        }
+        else if (neighbors.total <= lonelinessLimit) {
+            deaths.push({ cellPosition: cellPosition, isAlone: true, neighbors: neighbors });
+        }
+        else {
+            update(cellPosition, neighbors, grid, scene);
+        }
+    }
 }
 
 var getNeighbors = function (x, y, z, grid) {
@@ -116,7 +120,7 @@ var getNeighbors = function (x, y, z, grid) {
             for (var zTest = zLow; zTest < zHigh; ++zTest) {
                 if (xTest == x && yTest == y && zTest == z) continue;
                 var box = grid[gridPos(xTest, yTest, zTest)]
-                if (box/* && box.animations.length==0*/) {
+                if (box && !box.dead) {
                     neighbors.push(grid[gridPos(xTest, yTest, zTest)]);
                     ++totalNeighbors;
                 }
@@ -134,12 +138,14 @@ var gridPos = function(x,y,z) {
 //when a cell dies...
 var death = function (cellPosition, isAlone, grid, scene) {
 
+    grid[cellPosition].dead = true;
+
     //create the scaling animation
     var animationDeath = new BABYLON.Animation("deathAnimation", "scaling", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
     var keys = [];
     keys.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].scaling });
-    keys.push({ frame: gridUpdateInMS, value: new BABYLON.Vector3(0, 0, 0) });
+    keys.push({ frame: gridUpdateInMS, value: isAlone ? new BABYLON.Vector3(0, 0, 0) : new BABYLON.Vector3(2 * Math.random(), 2 * Math.random(), 2 * Math.random()) });
     animationDeath.setKeys(keys);
 
     var easingFunction = new BABYLON.QuinticEase();
@@ -149,6 +155,16 @@ var death = function (cellPosition, isAlone, grid, scene) {
     animationDeath.setEasingFunction(easingFunction);
 
     grid[cellPosition].animations.push(animationDeath);
+
+    //color animation
+    var colorAnimation = new BABYLON.Animation("colorAnimation", "material.diffuseColor", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_COLOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+
+    var keysColor = [];
+    keysColor.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].material.diffuseColor });
+    keysColor.push({ frame: gridUpdateInMS, value: isAlone ? BABYLON.Color3.Black() : BABYLON.Color3.Red() });
+    colorAnimation.setKeys(keysColor);
+
+    grid[cellPosition].animations.push(colorAnimation);
 
     scene.beginAnimation(grid[cellPosition], 0, gridUpdateInMS, false, 1.5, function () {
         //safety
@@ -163,6 +179,11 @@ var death = function (cellPosition, isAlone, grid, scene) {
 var birth = function (x, y, z, grid, scene) {
     //a clone hack...
     var box = scene.meshes.length ? scene.meshes[0].clone() : new BABYLON.Mesh.CreateBox("box", 1, scene);
+
+    //if (!box.material) {
+        box.material = new BABYLON.StandardMaterial("boxMat", scene);
+    //}
+
     box.position = new BABYLON.Vector3(x, y, z);
     box.scaling = BABYLON.Vector3.Zero();
 
@@ -188,6 +209,19 @@ var birth = function (x, y, z, grid, scene) {
 }
 
 //update living cell
-var update = function (cellPosition, totalNeighbors, grid) {
+var update = function (cellPosition, neighbors, grid, scene) {
+    //change the cell color
+    var color = overCrowdingLimit / (neighbors.total + 1);
 
+    //color animation
+    /*var colorAnimation = new BABYLON.Animation("colorAnimation", "material.diffuseColor", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_COLOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+
+    var keysColor = [];
+    keysColor.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].material.diffuseColor });
+    keysColor.push({ frame: gridUpdateInMS, value: new BABYLON.Color3(color, color, color) });
+    colorAnimation.setKeys(keysColor);
+
+    grid[cellPosition].animations.push(colorAnimation);
+
+    scene.beginAnimation(grid[cellPosition], 0, gridUpdateInMS, false, 2);*/
 }
