@@ -84,7 +84,7 @@ var gridTick = function (grid, scene) {
 
 var checkCell = function (x, y, z, grid, scene, /*tmp!*/deaths, births) {
     var cellPosition = gridPos(x, y, z);
-    var neighbors = getNeighbors(x, y, z, grid);
+    var neighbors = getNeighbors(x, y, z, grid, scene);
     if (!grid[cellPosition]) {
         if (neighbors.total == breedingLimit) {
             //births.push({ pos: [x, y, z], neighbors: neighbors });
@@ -106,7 +106,7 @@ var checkCell = function (x, y, z, grid, scene, /*tmp!*/deaths, births) {
     }
 }
 
-var getNeighbors = function (x, y, z, grid) {
+var getNeighbors = function (x, y, z, grid, scene, noProp) {
     var totalNeighbors = 0;
     var neighbors = [];
 
@@ -129,6 +129,16 @@ var getNeighbors = function (x, y, z, grid) {
                     ++totalNeighbors;
                 }
                 //check here for births of the neighboring cells
+                if (!noProp && (!box || (box && box.dead))) {
+                    if (!box) {
+                        grid[gridPos(xTest, yTest, zTest)] = { dead: true };
+                    }
+                    //console.log("checking");
+                    var n = getNeighbors(xTest, yTest, zTest, grid, scene, true);
+                    if(n.total == breedingLimit) {
+                        birth(x, y, z, grid, scene);
+                    }
+                }
             }
         }
     }
