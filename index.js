@@ -1,11 +1,11 @@
 ﻿///<reference path="scripts/babylon.max.js" />
 
-var gridSize = [15, 15, 15];
-var initialMeshes = 200;
+var gridSize = [10, 10, 10];
+var initialMeshes = 250;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
 var lonelinessLimit = 1;
-var gridUpdateInMS = 1000; //two seconds
+var gridUpdateInMS = 10000; //two seconds
 
 var createScene = function () {
     // Get the canvas element from our HTML below
@@ -15,7 +15,7 @@ var createScene = function () {
     var engine = new BABYLON.Engine(canvas, true);
 
     var scene = new BABYLON.Scene(engine);
-
+    
     engine.runRenderLoop(function () {
         scene.render();
     });
@@ -37,11 +37,16 @@ var createScene = function () {
 var initGrid = function (gridSize, initialMeshes, scene) {
     var grid = [];
 
+    var gridLength = gridSize[0] * gridSize[1] * gridSize[2];
+    for (var i = 0; i < gridLength; ++i) {
+        grid[i] = { state: 2 /*dead*/, interval: null, mesh: null, neighbors: 0 };
+    }
+
     for (var i = 0; i < initialMeshes; ++i) {
         var x = ~~(Math.random() * gridSize[0] - 1);
         var y = ~~(Math.random() * gridSize[1] - 1);
         var z = ~~(Math.random() * gridSize[2] - 1);
-        if (!grid[gridPos(x, y, z)]) {
+        if (grid[gridPos(x, y, z)].state == 2) {
             birth(x, y, z, grid, scene);
         }
     }
@@ -56,11 +61,15 @@ var initScene = function (scene, camera) {
 
     var grid = initGrid(gridSize, initialMeshes, scene);
 
-    ////setInterval(function () {
-    //    gridTick(grid, scene);
-    //}, gridUpdateInMS);
-
     camera.target = new BABYLON.Vector3(gridSize[0] / 2, gridSize[1] / 2, gridSize[2] / 2);
+
+    scene.onPointerDown = function (evt, pick) {
+        if (pick.hit) {
+            var box = pick.pickedMesh;
+            death(gridPos(box.position.x, box.position.y, box.position.z), false, grid, scene);
+        }
+    }
+    
 }
 
 var gridTick = function (grid, scene) {
@@ -68,36 +77,24 @@ var gridTick = function (grid, scene) {
     for (var x = 0; x < gridSize[0]; ++x) {
         for (var y = 0; y < gridSize[1]; ++y) {
             for (var z = 0; z < gridSize[2]; ++z) {
-                checkCell(x, y, z, grid, scene, deaths, births);
+                checkCell(x, y, z, grid, scene);
             }
         }
     }
-
-    births.forEach(function (birthDef) {
-        birth(birthDef.pos[0], birthDef.pos[1], birthDef.pos[2], grid, scene);
-    });
-
-    deaths.forEach(function (deathDef) {
-        death(deathDef.cellPosition, deathDef.isAlone, grid, scene);
-    });
 }
 
-var checkCell = function (x, y, z, grid, scene, /*tmp!*/deaths, births) {
+var checkCell = function (x, y, z, grid, scene) {
     var cellPosition = gridPos(x, y, z);
     var neighbors = getNeighbors(x, y, z, grid, scene);
-    if (!grid[cellPosition]) {
+    if (grid[cellPosition].state == 2) {
         if (neighbors.total == breedingLimit) {
-            //births.push({ pos: [x, y, z], neighbors: neighbors });
-            console.log("birth");
             birth(x, y, z, grid, scene);
         }
     } else {
         if (neighbors.total >= overCrowdingLimit) {
-            //deaths.push({ cellPosition: cellPosition, isAlone: false, neighbors: neighbors });
             death(cellPosition, false, grid, scene);
         }
         else if (neighbors.total <= lonelinessLimit) {
-            //deaths.push({ cellPosition: cellPosition, isAlone: true, neighbors: neighbors });
             death(cellPosition, true, grid, scene);
         }
         else {
@@ -124,19 +121,12 @@ var getNeighbors = function (x, y, z, grid, scene, noProp) {
             for (var zTest = zLow; zTest < zHigh; ++zTest) {
                 if (xTest == x && yTest == y && zTest == z) continue;
                 var box = grid[gridPos(xTest, yTest, zTest)]
-                if (box && !box.dead) {
+                if (box.state != 2) {
                     neighbors.push(grid[gridPos(xTest, yTest, zTest)]);
                     ++totalNeighbors;
-                }
-                //check here for births of the neighboring cells
-                if (!noProp && (!box || (box && box.dead))) {
-                    if (!box) {
-                        grid[gridPos(xTest, yTest, zTest)] = { dead: true };
-                    }
-                    //console.log("checking");
-                    var n = getNeighbors(xTest, yTest, zTest, grid, scene, true);
-                    if(n.total == breedingLimit) {
-                        birth(x, y, z, grid, scene);
+                } else {
+                    if (grid[gridPos(x, y, z)].state != 2) {
+                        checkCell(xTest, yTest, zTest, grid, scene);
                     }
                 }
             }
@@ -153,15 +143,17 @@ var gridPos = function(x,y,z) {
 //when a cell dies...
 var death = function (cellPosition, isAlone, grid, scene) {
 
-    grid[cellPosition].dead = true;
-    clearInterval(grid[cellPosition].interval)
+    grid[cellPosition].state = 1;
+    clearInterval(grid[cellPosition].interval);
+    var mesh = grid[cellPosition].mesh;
 
     //create the scaling animation
-    var animationDeath = new BABYLON.Animation("deathAnimation", "scaling", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+    var tmp = [~~(gridUpdateInMS * Math.random()), ~~(gridUpdateInMS * Math.random())];
+    var animationDeath = new BABYLON.Animation("deathAnimation", "scaling", Math.max(tmp[0], tmp[1]), BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
     var keys = [];
-    keys.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].scaling });
-    keys.push({ frame: gridUpdateInMS, value: isAlone ? new BABYLON.Vector3(0, 0, 0) : new BABYLON.Vector3(2 * Math.random(), 2 * Math.random(), 2 * Math.random()) });
+    keys.push({ frame: Math.min(tmp[0], tmp[1]), value: mesh.scaling });
+    keys.push({ frame: Math.max(tmp[0], tmp[1]), value: isAlone ? new BABYLON.Vector3(0, 0, 0) : new BABYLON.Vector3(2 * Math.random(), 2 * Math.random(), 2 * Math.random()) });
     animationDeath.setKeys(keys);
 
     var easingFunction = new BABYLON.QuinticEase();
@@ -170,24 +162,22 @@ var death = function (cellPosition, isAlone, grid, scene) {
 
     animationDeath.setEasingFunction(easingFunction);
 
-    grid[cellPosition].animations.push(animationDeath);
+    mesh.animations.push(animationDeath);
 
     //color animation
     var colorAnimation = new BABYLON.Animation("colorAnimation", "material.diffuseColor", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_COLOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
     var keysColor = [];
-    keysColor.push({ frame: ~~(gridUpdateInMS * Math.random()), value: grid[cellPosition].material.diffuseColor });
-    keysColor.push({ frame: gridUpdateInMS, value: isAlone ? BABYLON.Color3.Black() : BABYLON.Color3.Red() });
+    keysColor.push({ frame: Math.min(tmp[0], tmp[1]), value: mesh.material.diffuseColor });
+    keysColor.push({ frame: Math.max(tmp[0], tmp[1]), value: isAlone ? BABYLON.Color3.Black() : BABYLON.Color3.Red() });
     colorAnimation.setKeys(keysColor);
 
-    grid[cellPosition].animations.push(colorAnimation);
+    mesh.animations.push(colorAnimation);
 
-    scene.beginAnimation(grid[cellPosition], 0, gridUpdateInMS, false, 1.5, function () {
-        //safety
-        if (grid[cellPosition]) {
-            grid[cellPosition].dispose();
-            grid[cellPosition] = null;
-        }
+    scene.beginAnimation(mesh, 0, Math.max(tmp[0], tmp[1]), false, 1.5, function () {
+        grid[cellPosition].state = 2;
+        mesh.dispose();
+        grid[cellPosition].mesh = null;
     });
 }
 
@@ -196,19 +186,18 @@ var birth = function (x, y, z, grid, scene) {
     //a clone hack...
     var box = scene.meshes.length ? scene.meshes[0].clone() : new BABYLON.Mesh.CreateBox("box", 1, scene);
 
-    //if (!box.material) {
-        box.material = new BABYLON.StandardMaterial("boxMat", scene);
-    //}
+    box.material = new BABYLON.StandardMaterial("boxMat", scene);
 
     box.position = new BABYLON.Vector3(x, y, z);
     box.scaling = BABYLON.Vector3.Zero();
 
     //create the scaling animation
-    var animationBirth = new BABYLON.Animation("birthAnimation", "scaling", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
+    var tmp = [~~(gridUpdateInMS * Math.random()), ~~(gridUpdateInMS * Math.random())];
+
+    var animationBirth = new BABYLON.Animation("birthAnimation", "scaling", Math.max(tmp[0], tmp[1]), BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
     var keys = [];
-    var tmp = [~~(gridUpdateInMS * Math.random()), ~~(gridUpdateInMS * Math.random())];
-    keys.push({ frame: Math.min(tmp[0], tmp[1]), value: box.scaling });
+    keys.push({ frame: 0, value: box.scaling });
     keys.push({ frame: Math.max(tmp[0], tmp[1]), value: new BABYLON.Vector3(1, 1, 1) });
     animationBirth.setKeys(keys);
 
@@ -220,14 +209,25 @@ var birth = function (x, y, z, grid, scene) {
 
     box.animations.push(animationBirth);
 
-    scene.beginAnimation(box, 0, gridUpdateInMS, false);
+    //color animation
+    var colorAnimation = new BABYLON.Animation("colorAnimation", "material.diffuseColor", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_COLOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
-    grid[gridPos(x, y, z)] = box;
-    
-    box.interval = setInterval(function () {
-        console.log("tick");
+    var keysColor = [];
+    keysColor.push({ frame: Math.min(tmp[0], tmp[1]), value: box.material.diffuseColor });
+    keysColor.push({ frame: Math.max(tmp[0], tmp[1]), value: BABYLON.Color3.White() });
+    colorAnimation.setKeys(keysColor);
+
+    box.animations.push(colorAnimation);
+
+    scene.beginAnimation(box, 0, Math.max(tmp[0], tmp[1]), false, 2*Math.random() + 0.5, function () {
         checkCell(x, y, z, grid, scene);
-    }, gridUpdateInMS);
+        box.interval = setInterval(function () {
+            checkCell(x, y, z, grid, scene);
+        }, Math.max(tmp[0], tmp[1]));
+    });
+
+    grid[gridPos(x, y, z)].mesh = box;
+    grid[gridPos(x, y, z)].state = 0;
 }
 
 //update living cell
