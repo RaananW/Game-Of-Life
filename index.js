@@ -1,6 +1,6 @@
 ﻿///<reference path="scripts/babylon.max.js" />
 
-var gridSize = [10, 10, 10];
+var gridSize = [15, 15, 15];
 var initialMeshes = 250;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
