@@ -175,7 +175,7 @@ var death = function (cellPosition, isAlone, grid, scene) {
 //when a new cell is born...
 var birth = function (x, y, z, grid, scene) {
     //a clone hack...
-    var box = scene.meshes.length ? scene.meshes[0].clone() : new BABYLON.Mesh.CreateBox("box", 1, scene);
+    var box = scene.meshes.length ? scene.meshes[0].clone() : BABYLON.Mesh.CreateBox("box", 1, scene);
 
     box.material = new BABYLON.StandardMaterial("boxMat", scene);
 
