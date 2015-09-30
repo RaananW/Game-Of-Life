@@ -32,6 +32,8 @@ var createScene = function () {
     var light = new BABYLON.HemisphericLight("hemi", new BABYLON.Vector3(0, 1, 0), scene);
 
     initScene(scene, camera);
+    
+    return scene;
 }
 
 var initGrid = function (gridSize, initialMeshes, scene) {
@@ -72,17 +74,6 @@ var initScene = function (scene, camera) {
     
 }
 
-var gridTick = function (grid, scene) {
-    var births = [], deaths = [];
-    for (var x = 0; x < gridSize[0]; ++x) {
-        for (var y = 0; y < gridSize[1]; ++y) {
-            for (var z = 0; z < gridSize[2]; ++z) {
-                checkCell(x, y, z, grid, scene);
-            }
-        }
-    }
-}
-
 var checkCell = function (x, y, z, grid, scene) {
     var cellPosition = gridPos(x, y, z);
     var neighbors = getNeighbors(x, y, z, grid, scene);
@@ -103,7 +94,7 @@ var checkCell = function (x, y, z, grid, scene) {
     }
 }
 
-var getNeighbors = function (x, y, z, grid, scene, noProp) {
+var getNeighbors = function (x, y, z, grid, scene) {
     var totalNeighbors = 0;
     var neighbors = [];
 
@@ -163,7 +154,7 @@ var death = function (cellPosition, isAlone, grid, scene) {
     animationDeath.setEasingFunction(easingFunction);
 
     mesh.animations.push(animationDeath);
-
+    
     //color animation
     var colorAnimation = new BABYLON.Animation("colorAnimation", "material.diffuseColor", gridUpdateInMS, BABYLON.Animation.ANIMATIONTYPE_COLOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CYCLE);
 
