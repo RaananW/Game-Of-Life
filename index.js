@@ -5,7 +5,7 @@ var initialMeshes = 250;
 var overCrowdingLimit = 6;
 var breedingLimit = 5;
 var lonelinessLimit = 1;
-var gridUpdateInMS = 10000; //two seconds
+var gridUpdateInMS = 10000; 
 
 var createScene = function () {
     // Get the canvas element from our HTML below
